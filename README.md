@@ -1,2 +1,4 @@
 # telegram-bot
-Movie bot . Weather bot
+Weather bot
+live weather your city 
+our search city name our show weather 
