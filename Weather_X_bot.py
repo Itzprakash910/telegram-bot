@@ -2,62 +2,89 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 import requests
 
-# 🔹 API KEYS (Replace with your actual keys)
+# 🔹 API KEYS
 BOT_TOKEN = "7880903198:AAE9L8v6vbbpLSi_M-6ZqsH38hC608glYz8"
-WEATHER_API_KEY = " da8e40190c581ab56fd4e94bb9bf11c1  "
+WEATHER_API_KEY = "7gtadAg0PNIUvsz8sFR2qQ1CwKzRSAkj"  # Tomorrow.io API Key
 
-# 🔹 Function to Get Current Weather
+# 🔹 Function to Get Current Weather (Tomorrow.io API)
 def get_weather(city):
-    url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={WEATHER_API_KEY}&units=metric"
+    url = f"https://api.tomorrow.io/v4/weather/realtime?location={city}&apikey={WEATHER_API_KEY}"
     response = requests.get(url).json()
-    
-    if "main" in response:
-        temp = response["main"]["temp"]
-        humidity = response["main"]["humidity"]
-        weather_desc = response["weather"][0]["description"]
-        
+
+    if "data" in response:
+        temp = response["data"]["values"]["temperature"]
+        humidity = response["data"]["values"]["humidity"]
+        weather_code = response["data"]["values"]["weatherCode"]
+
+        # Weather Condition Mapping
+        weather_conditions = {
+            1000: "Clear Sky ☀️",
+            1100: "Mostly Clear 🌤️",
+            1101: "Partly Cloudy ⛅",
+            1102: "Mostly Cloudy 🌥️",
+            2000: "Fog 🌫️",
+            2100: "Light Fog 🌫️",
+            4000: "Drizzle 🌦️",
+            4001: "Rain 🌧️",
+            4200: "Light Rain ☔",
+            4201: "Heavy Rain ⛈️",
+            5000: "Snow ❄️",
+            5100: "Light Snow 🌨️",
+            6000: "Freezing Drizzle ❄️🌧️",
+            6200: "Light Freezing Rain 🌧️❄️",
+            7102: "Light Ice Pellets 🌨️",
+            8000: "Thunderstorm ⚡",
+        }
+        weather_desc = weather_conditions.get(weather_code, "Unknown Weather")
+
         return (
-            f"🌍 **{city.upper()} Weather Report**\n"
-            f"🌡 **Temperature:** {temp}°C\n"
-            f"💧 **Humidity:** {humidity}%\n"
-            f"🌤 **Condition:** {weather_desc.capitalize()}\n\n"
+            f"🌍  • {city.upper()} Weather Report • \n"
+            f"🌡 • Temperature: • {temp}°C\n"
+            f"💧 • Humidity: • {humidity}%\n"
+            f"🌤 • Condition: •  {weather_desc}\n\n"
             f"🔔 Stay safe and have a great day! 😊"
         )
     return "❌ City not found!"
 
 # 🔹 Function to Get 7-Day Forecast
 def get_forecast(city):
-    url = f"http://api.openweathermap.org/data/2.5/forecast?q={city}&appid={WEATHER_API_KEY}&units=metric"
+    url = f"https://api.tomorrow.io/v4/weather/forecast/daily?location={city}&apikey={WEATHER_API_KEY}"
     response = requests.get(url).json()
-    
-    if "list" in response:
-        forecast_text = f"📍 **{city} - 7-Day Forecast 🌦**\n"
-        for i in range(0, len(response["list"]), 8):  # Every 8th entry (24-hour gap)
-            date = response["list"][i]["dt_txt"].split()[0]
-            temp = response["list"][i]["main"]["temp"]
-            weather_desc = response["list"][i]["weather"][0]["description"]
-            forecast_text += f"📅 {date} - {temp}°C, {weather_desc}\n"
+
+    if "timelines" in response:
+        forecast_text = f"📍  • {city.upper()} - 7-Day Forecast 🌦 • \n"
+        for day in response["timelines"]["daily"]:
+            date = day["time"].split("T")[0]
+            temp_min = day["values"]["temperatureMin"]
+            temp_max = day["values"]["temperatureMax"]
+            weather_code = day["values"]["weatherCodeMax"]
+            weather_desc = get_weather(city).split("\n")[3].split("**")[1]  # Extract Condition
+
+            forecast_text += f"📅 {date} - {temp_min}°C/{temp_max}°C, {weather_desc}\n"
+
         return forecast_text
     return "❌ City not found!"
 
-# 🔹 Weather Alert Function (Heavy Rain, Storm, Heatwave)
+# 🔹 Weather Alert Function
 def get_alert(city):
-    url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={WEATHER_API_KEY}&units=metric"
+    url = f"https://api.tomorrow.io/v4/weather/realtime?location={city}&apikey={WEATHER_API_KEY}"
     response = requests.get(url).json()
 
-    if "weather" in response:
-        weather_desc = response["weather"][0]["description"]
-        if "rain" in weather_desc or "storm" in weather_desc:
-            return f"⚠️ **Weather Alert for {city.upper()}!** 🌧️🌪️\nHeavy Rain/Storm expected! Stay safe! 🙏"
-        elif "hot" in weather_desc or response["main"]["temp"] > 40:
-            return f"🔥 **Heatwave Alert in {city.upper()}!** 🌡️\nStay hydrated & avoid going out in extreme heat! 🥵"
+    if "data" in response:
+        temp = response["data"]["values"]["temperature"]
+        weather_code = response["data"]["values"]["weatherCode"]
+
+        if weather_code in [4201, 5000, 8000]:
+            return f"⚠️  • Weather Alert for {city.upper()}! • 🌧️🌪️\nHeavy Rain/Snow/Thunderstorm expected! Stay safe! 🙏"
+        elif temp > 40:
+            return f"🔥 • Heatwave Alert in {city.upper()}! • 🌡️\nStay hydrated & avoid going out in extreme heat! 🥵"
     return None
 
 # 🔹 Command for Weather
 async def weather(update: Update, context: ContextTypes.DEFAULT_TYPE):
     city = " ".join(context.args)
     if not city:
-        await update.message.reply_text("❌ Please provide a city name! Example: `/weather Mumbai`")
+        await update.message.reply_text("❌ Please Provide A City Name ! Example: `/Weather Mumbai`")
     else:
         weather_report = get_weather(city)
         alert_message = get_alert(city)
@@ -69,7 +96,7 @@ async def weather(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def forecast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     city = " ".join(context.args)
     if not city:
-        await update.message.reply_text("❌ Please provide a city name! Example: `/forecast Mumbai`")
+        await update.message.reply_text("❌ Please Provide A City Name! Example: `/Forecast Mumbai`")
     else:
         await update.message.reply_text(get_forecast(city))
 
@@ -85,7 +112,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
-        "🌤 **Welcome to WeatheryX!**\n"
+        "🌤  • Welcome to WeatheryX! \n"
         "📌 Get real-time weather updates:\n"
         "📝 Use `/weather CityName` for current weather.\n"
         "🔮 Use `/forecast CityName` for a 7-day forecast.\n"
@@ -100,7 +127,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     city = query.data
 
     if city == "location":
-        await query.message.reply_text("📍 Please share your live location for weather updates.")
+        await query.message.reply_text("📍 Please Share your Live Location For  Weather Updates.")
     else:
         weather_report = get_weather(city)
         alert_message = get_alert(city)
@@ -118,4 +145,6 @@ application.add_handler(CommandHandler("forecast", forecast))
 application.add_handler(CallbackQueryHandler(button_click))
 
 # 🔹 Start Bot
-application.run_polling()
+if __name__ == "__main__":
+    print("✅ Bot is running...")
+    application.run_polling()
